@@ -21,3 +21,12 @@ CREATE TABLE IF NOT EXISTS order_items (
     unit_price DECIMAL(10,2) NOT NULL,
     CONSTRAINT fk_items_order FOREIGN KEY (order_id) REFERENCES orders(id)
 );
+
+CREATE TABLE IF NOT EXISTS customer_order_summary (
+    customer_id BIGINT PRIMARY KEY,
+    customer_name VARCHAR(255) NOT NULL,
+    total_orders INT NOT NULL DEFAULT 0,
+    total_spent DECIMAL(12,2) NOT NULL DEFAULT 0,
+    last_order_at TIMESTAMP NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);

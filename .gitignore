@@ -37,3 +37,6 @@ build/
 
 ### Logs ###
 *.log
+
+### CDC runtime state ###
+debezium-data/

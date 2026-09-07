@@ -1,6 +1,6 @@
-package com.example.cdcmaterializedview.cdc;
+package com.example.sync.cdc;
 
-import com.example.cdcmaterializedview.service.MaterializedViewSyncService;
+import com.example.sync.service.MaterializedViewSyncService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.debezium.engine.ChangeEvent;

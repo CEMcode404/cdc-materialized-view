@@ -1,4 +1,4 @@
-package com.example.cdcmaterializedview.cdc;
+package com.example.sync.cdc;
 
 import io.debezium.engine.DebeziumEngine;
 import io.debezium.engine.format.Json;
@@ -106,7 +106,7 @@ public class DebeziumConfig implements SmartLifecycle {
 
         executor = Executors.newSingleThreadExecutor(r -> {
             Thread t = new Thread(r, "debezium-embedded-engine");
-            t.setDaemon(true);
+            t.setDaemon(false);
             return t;
         });
         executor.execute(engine);

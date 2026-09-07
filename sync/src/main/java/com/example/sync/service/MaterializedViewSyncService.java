@@ -1,4 +1,4 @@
-package com.example.cdcmaterializedview.service;
+package com.example.sync.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

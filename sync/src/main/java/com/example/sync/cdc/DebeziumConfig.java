@@ -9,21 +9,28 @@ import org.springframework.context.SmartLifecycle;
 import org.springframework.stereotype.Component;
 
 import java.io.File;
+import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.stream.Collectors;
 
 /**
  * Boots Debezium's EMBEDDED engine - Debezium reads the MySQL binlog the
  * normal way, but instead of publishing to a Kafka topic, it hands each
  * change event directly to our callback method, inside this same JVM.
  * No Kafka, no Kafka Connect cluster required.
+ *
+ * table.include.list is computed dynamically from every registered
+ * MaterializedViewHandler's watchedTables() - adding a new handler bean
+ * automatically expands what Debezium watches, no changes needed here.
  */
 @Component
 public class DebeziumConfig implements SmartLifecycle {
 
     private static final Logger log = LoggerFactory.getLogger(DebeziumConfig.class);
     private final DebeziumChangeEventListener changeEventListener;
+    private final List<MaterializedViewHandler> handlers;
 
     @Value("${debezium.db.hostname}")
     private String dbHostname;
@@ -42,8 +49,9 @@ public class DebeziumConfig implements SmartLifecycle {
     private DebeziumEngine<io.debezium.engine.ChangeEvent<String, String>> engine;
     private volatile boolean running = false;
 
-    public DebeziumConfig(DebeziumChangeEventListener changeEventListener) {
+    public DebeziumConfig(DebeziumChangeEventListener changeEventListener, List<MaterializedViewHandler> handlers) {
         this.changeEventListener = changeEventListener;
+        this.handlers = handlers;
     }
 
     private Properties buildProperties() {
@@ -74,8 +82,13 @@ public class DebeziumConfig implements SmartLifecycle {
         props.setProperty("topic.prefix", "cdcdemo-server");
 
         props.setProperty("database.include.list", dbName);
-        props.setProperty("table.include.list",
-                dbName + ".customers," + dbName + ".orders," + dbName + ".order_items");
+
+        String tableList = handlers.stream()
+                .flatMap(h -> h.watchedTables().stream())
+                .distinct()
+                .map(table -> dbName + "." + table)
+                .collect(Collectors.joining(","));
+        props.setProperty("table.include.list", tableList);
 
         props.setProperty("include.schema.changes", "false");
         props.setProperty("snapshot.mode", "initial");
@@ -111,7 +124,7 @@ public class DebeziumConfig implements SmartLifecycle {
         });
         executor.execute(engine);
         running = true;
-        log.info("Debezium embedded engine started (watching {}.customers/orders/order_items)", dbName);
+        log.info("Debezium embedded engine started (watching: {})", props.getProperty("table.include.list"));
     }
 
     @Override

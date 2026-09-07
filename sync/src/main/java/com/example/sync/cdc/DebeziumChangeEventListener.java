@@ -1,6 +1,5 @@
 package com.example.sync.cdc;
 
-import com.example.sync.service.MaterializedViewSyncService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.debezium.engine.ChangeEvent;
@@ -8,21 +7,25 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
+
 /**
  * Receives every row-level change event from Debezium (one call per changed
- * row, not per SQL statement). For each event, figures out which customer_id
- * it affects, then asks MaterializedViewSyncService to recompute that one row.
+ * row, not per SQL statement). Parses the event, then dispatches it to
+ * every registered MaterializedViewHandler that declared interest in the
+ * source table - adding a new materialized view is just adding a new
+ * handler bean, this class doesn't need to change.
  */
 @Component
 public class DebeziumChangeEventListener {
 
     private static final Logger log = LoggerFactory.getLogger(DebeziumChangeEventListener.class);
 
-    private final MaterializedViewSyncService syncService;
+    private final List<MaterializedViewHandler> handlers;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public DebeziumChangeEventListener(MaterializedViewSyncService syncService) {
-        this.syncService = syncService;
+    public DebeziumChangeEventListener(List<MaterializedViewHandler> handlers) {
+        this.handlers = handlers;
     }
 
     public void handle(ChangeEvent<String, String> event) {
@@ -40,42 +43,20 @@ public class DebeziumChangeEventListener {
             }
 
             String sourceTable = payload.path("source").path("table").asText(null);
+            if (sourceTable == null) {
+                return;
+            }
+
             JsonNode after = payload.get("after");
             JsonNode before = payload.get("before");
 
-            Long customerId = resolveAffectedCustomerId(sourceTable, op, after, before);
-            if (customerId != null) {
-                syncService.refreshCustomerSummary(customerId);
+            for (MaterializedViewHandler handler : handlers) {
+                if (handler.watchedTables().contains(sourceTable)) {
+                    handler.handle(sourceTable, op, before, after);
+                }
             }
         } catch (Exception e) {
             log.error("Failed to process CDC event: {}", valueJson, e);
-        }
-    }
-
-    private Long resolveAffectedCustomerId(String table, String op, JsonNode after, JsonNode before) {
-        if (table == null) {
-            return null;
-        }
-
-        // Deletes only have "before"; inserts/updates use "after"
-        JsonNode row = "d".equals(op) ? before : after;
-        if (row == null || row.isNull()) {
-            return null;
-        }
-
-        switch (table) {
-            case "customers":
-                return row.path("id").isMissingNode() ? null : row.path("id").asLong();
-
-            case "orders":
-                return row.path("customer_id").isMissingNode() ? null : row.path("customer_id").asLong();
-
-            case "order_items":
-                Long orderId = row.path("order_id").isMissingNode() ? null : row.path("order_id").asLong();
-                return syncService.resolveCustomerIdFromOrderId(orderId);
-
-            default:
-                return null;
         }
     }
 }

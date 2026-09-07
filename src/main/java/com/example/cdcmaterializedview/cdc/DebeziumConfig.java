@@ -23,6 +23,7 @@ import java.util.concurrent.Executors;
 public class DebeziumConfig implements SmartLifecycle {
 
     private static final Logger log = LoggerFactory.getLogger(DebeziumConfig.class);
+    private final DebeziumChangeEventListener changeEventListener;
 
     @Value("${debezium.db.hostname}")
     private String dbHostname;
@@ -40,6 +41,10 @@ public class DebeziumConfig implements SmartLifecycle {
     private ExecutorService executor;
     private DebeziumEngine<io.debezium.engine.ChangeEvent<String, String>> engine;
     private volatile boolean running = false;
+
+    public DebeziumConfig(DebeziumChangeEventListener changeEventListener) {
+        this.changeEventListener = changeEventListener;
+    }
 
     private Properties buildProperties() {
         File dir = new File(offsetDir);
@@ -80,6 +85,7 @@ public class DebeziumConfig implements SmartLifecycle {
         props.setProperty("value.converter", "org.apache.kafka.connect.json.JsonConverter");
         props.setProperty("value.converter.schemas.enable", "false");
         props.setProperty("bootstrap.servers", "localhost:9092");
+        props.setProperty("decimal.handling.mode", "string");
 
         return props;
     }
@@ -90,10 +96,7 @@ public class DebeziumConfig implements SmartLifecycle {
 
         engine = DebeziumEngine.create(Json.class)
                 .using(props)
-                .notifying(event -> {
-                    // Placeholder for now - we'll wire in the real listener in the next step
-                    log.info("CDC event received: {}", event.value());
-                })
+                .notifying(changeEventListener::handle)
                 .using((success, message, error) -> {
                     if (!success) {
                         log.error("Debezium engine stopped with error: {}", message, error);
